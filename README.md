@@ -1,5 +1,10 @@
 # Desafio Técnico - IBGE + Supabase
 
+![Status](https://img.shields.io/badge/status-completed-brightgreen)
+![Python](https://img.shields.io/badge/python-3.13-blue)
+![Supabase](https://img.shields.io/badge/supabase-integrated-green)
+![License](https://img.shields.io/badge/license-private-red)
+
 ## 📋 Sobre o Projeto
 
 Este projeto implementa uma solução completa para o desafio técnico que consiste em:
