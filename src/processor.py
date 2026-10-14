@@ -1,14 +1,17 @@
+"""Normalização, identificação e exportação dos municípios informados."""
+
 import csv
 import unicodedata
 import os
 
 def normalizar(texto):
-    """Remove acentos e deixa minúsculo para comparação"""
-    texto = texto.lower()
+    """Remove acentos, normaliza espaços e converte o texto para minúsculas."""
+    texto = texto.strip().lower()
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
-    return texto
+    return ' '.join(texto.split())
 
 def encontrar_municipio(nome_input, lista_ibge):
+    """Encontra um município por nome normalizado e informa se há ambiguidade."""
     nome_norm = normalizar(nome_input)
     matches = []
     for mun in lista_ibge:
@@ -23,7 +26,7 @@ def encontrar_municipio(nome_input, lista_ibge):
         return ("NAO_ENCONTRADO", None)
 
 def processar(input_csv_path, output_csv_path, lista_ibge):
-    # Garantir que os caminhos são relativos ao diretório do projeto
+    """Cruza o CSV de entrada com os dados do IBGE e grava os resultados."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
     # Se o caminho não for absoluto, torna absoluto

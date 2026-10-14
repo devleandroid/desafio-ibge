@@ -27,7 +27,7 @@ class TestNormalizacao(unittest.TestCase):
         self.assertEqual(normalizar("Rio De Janeiro"), "rio de janeiro")
     
     def test_texto_com_espacos(self):
-        """Testa preservação de espaços."""
+        """Testa remoção de espaços externos e compactação dos espaços internos."""
         self.assertEqual(normalizar("  Santo  André  "), "santo andre")
     
     def test_caracteres_especiais(self):
@@ -66,6 +66,15 @@ class TestMatching(unittest.TestCase):
         self.assertEqual(status, "NAO_ENCONTRADO")
         self.assertIsNone(dados)
 
+    def test_municipio_ambiguo(self):
+        """Testa que nomes repetidos são reportados como ambíguos."""
+        lista_duplicada = self.lista_ibge + [
+            {"nome": "Niterói", "uf": "AM", "regiao": "Norte", "id_ibge": 1300000}
+        ]
+        status, dados = encontrar_municipio("Niteroi", lista_duplicada)
+        self.assertEqual(status, "AMBIGUO")
+        self.assertIsNone(dados)
+
 
 class TestEstatisticas(unittest.TestCase):
     """Testes para cálculo de estatísticas."""
@@ -84,6 +93,7 @@ class TestEstatisticas(unittest.TestCase):
         self.assertEqual(stats["total_municipios"], 4)
         self.assertEqual(stats["total_ok"], 3)
         self.assertEqual(stats["total_nao_encontrado"], 1)
+        self.assertEqual(stats["total_ambiguo"], 0)
         self.assertEqual(stats["pop_total_ok"], 6000)
         self.assertEqual(stats["medias_por_regiao"]["Sudeste"], 1500.0)
         self.assertEqual(stats["medias_por_regiao"]["Sul"], 3000.0)
@@ -98,9 +108,17 @@ class TestEstatisticas(unittest.TestCase):
         stats = calcular_estatisticas(resultados)
         
         self.assertEqual(stats["total_ok"], 0)
+        self.assertEqual(stats["total_ambiguo"], 0)
         self.assertEqual(stats["pop_total_ok"], 0)
         self.assertEqual(stats["medias_por_regiao"], {})
-    
+
+    def test_contagem_de_municipio_ambiguo(self):
+        """Testa a contagem de entradas com nome ambíguo."""
+        stats = calcular_estatisticas([
+            {"status": "AMBIGUO", "populacao_input": "1000", "regiao": ""}
+        ])
+        self.assertEqual(stats["total_ambiguo"], 1)
+
     def test_multiplas_regioes(self):
         """Testa cálculo de médias para múltiplas regiões."""
         resultados = [

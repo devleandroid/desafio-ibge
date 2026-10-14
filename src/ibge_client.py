@@ -1,7 +1,9 @@
+"""Cliente da API de Localidades do IBGE."""
+
 import requests
 
 def carregar_municipios_ibge():
-    """Baixa todos os municípios do IBGE uma vez e retorna lista de dicionários"""
+    """Baixa os municípios do IBGE e extrai nome, UF, região e identificador."""
     print("   Conectando à API do IBGE...")
     url = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
     

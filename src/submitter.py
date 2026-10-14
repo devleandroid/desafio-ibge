@@ -1,48 +1,49 @@
-import requests
+"""Envio das estatísticas calculadas para uma Edge Function do Supabase."""
+
 import os
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Usar a URL do .env (seu próprio Supabase)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+
 
 def enviar_estatisticas(access_token, stats):
-    """Envia estatísticas para a Edge Function do Supabase"""
-    
-    # Verificar se a URL está configurada
+    """Envia estatísticas usando o token de acesso do usuário autenticado."""
     if not SUPABASE_URL:
         print("❌ SUPABASE_URL não encontrada no .env")
         return
-    
-    url = f"{SUPABASE_URL}/functions/v1/ibge-submit"
+    if not access_token:
+        print("❌ Token de acesso ausente; as estatísticas não foram enviadas.")
+        return
+
+    url = f"{SUPABASE_URL.rstrip('/')}/functions/v1/ibge-submit"
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
-    payload = {"stats": stats}
-    
+    if SUPABASE_ANON_KEY:
+        headers["apikey"] = SUPABASE_ANON_KEY
+
     print(f"\n📤 Enviando estatísticas para: {url}")
-    print(f"   Token: {access_token[:50]}...")
-    
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=10)
-        
-        if resp.status_code == 200:
+        resp = requests.post(url, json={"stats": stats}, headers=headers, timeout=10)
+
+        if 200 <= resp.status_code < 300:
             print("✅ Estatísticas enviadas com sucesso!")
             if resp.text:
-                print(f"   Resposta: {resp.json()}")
+                try:
+                    print(f"   Resposta: {resp.json()}")
+                except ValueError:
+                    print(f"   Resposta: {resp.text}")
         elif resp.status_code == 404:
-            print("⚠️ Função 'ibge-submit' não encontrada no seu Supabase")
-            print("   Isso é normal se você não criou a Edge Function")
-            print("   O desafio espera que a função exista no Supabase da Nasajon")
-            print("\n   ✅ Seu código está correto! O problema é que a função")
-            print("      não existe no seu projeto pessoal do Supabase.")
+            print("⚠️ Função 'ibge-submit' não encontrada no Supabase.")
+            print("   Verifique se a Edge Function está implantada neste projeto.")
         else:
             print(f"❌ Erro ao enviar: {resp.status_code}")
             print(f"   Resposta: {resp.text}")
-            
-    except requests.exceptions.ConnectionError as e:
-        print(f"❌ Erro de conexão: {e}")
-    except Exception as e:
-        print(f"❌ Erro inesperado: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erro ao enviar estatísticas: {e}")

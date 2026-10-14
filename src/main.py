@@ -1,4 +1,7 @@
+"""Coordena autenticação, consulta ao IBGE, processamento e envio das estatísticas."""
+
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from auth import login
 from ibge_client import carregar_municipios_ibge
@@ -9,11 +12,14 @@ from submitter import enviar_estatisticas
 load_dotenv()
 
 def main():
-    # Criar pasta data se não existir
-    os.makedirs("data", exist_ok=True)
+    """Executa o fluxo completo do desafio a partir de data/input.csv."""
+    diretorio_dados = Path(__file__).resolve().parent.parent / "data"
+    diretorio_dados.mkdir(exist_ok=True)
+    arquivo_entrada = diretorio_dados / "input.csv"
+    arquivo_saida = diretorio_dados / "resultado.csv"
     
     # Verificar se input.csv existe
-    if not os.path.exists("data/input.csv"):
+    if not arquivo_entrada.exists():
         print("❌ Arquivo data/input.csv não encontrado!")
         print("   Por favor, crie o arquivo com os dados do desafio")
         print("\n   Conteúdo esperado:")
@@ -34,7 +40,7 @@ def main():
     
     # 3. Processar input.csv
     print("Processando input.csv...")
-    resultados = processar("data/input.csv", "data/resultado.csv", municipios_ibge)
+    resultados = processar(str(arquivo_entrada), str(arquivo_saida), municipios_ibge)
     
     # 4. Calcular estatísticas
     stats = calcular_estatisticas(resultados)
