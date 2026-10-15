@@ -1,36 +1,28 @@
-"""Cálculo dos totais e médias dos municípios processados."""
+"""Compatibilidade para cálculo de estatísticas usando dicionários legados."""
 
-from collections import defaultdict
+from domain.models import Municipality, MunicipalityResult, MunicipalityStatus
+from domain.services import calculate_statistics
+
 
 def calcular_estatisticas(resultados):
-    """Calcula totais por status, população encontrada e médias por região."""
-    total_municipios = len(resultados)
-    total_ok = sum(1 for r in resultados if r["status"] == "OK")
-    total_nao_encontrado = sum(1 for r in resultados if r["status"] == "NAO_ENCONTRADO")
-    total_ambiguo = sum(1 for r in resultados if r["status"] == "AMBIGUO")
-    total_erro_api = sum(1 for r in resultados if r["status"] == "ERRO_API")
-    
-    pop_total_ok = 0
-    medias_por_regiao = defaultdict(list)
-    
-    for r in resultados:
-        if r["status"] == "OK":
-            pop = int(r["populacao_input"])
-            pop_total_ok += pop
-            regiao = r["regiao"]
-            medias_por_regiao[regiao].append(pop)
-    
-    # Calcula média por região
-    medias = {}
-    for regiao, pops in medias_por_regiao.items():
-        medias[regiao] = sum(pops) / len(pops)
-    
-    return {
-        "total_municipios": total_municipios,
-        "total_ok": total_ok,
-        "total_nao_encontrado": total_nao_encontrado,
-        "total_ambiguo": total_ambiguo,
-        "total_erro_api": total_erro_api,
-        "pop_total_ok": pop_total_ok,
-        "medias_por_regiao": medias
-    }
+    """Converte resultados antigos para entidades e devolve as estatísticas."""
+    rows = []
+    for result in resultados:
+        status = MunicipalityStatus(result["status"])
+        matched = None
+        if status is MunicipalityStatus.OK:
+            matched = Municipality(
+                name=result.get("municipio_ibge", ""),
+                state=result.get("uf", ""),
+                region=result.get("regiao", ""),
+                ibge_id=result.get("id_ibge"),
+            )
+        rows.append(
+            MunicipalityResult(
+                input_name=result.get("municipio_input", ""),
+                input_population=str(result.get("populacao_input", "0")),
+                status=status,
+                municipality=matched,
+            )
+        )
+    return calculate_statistics(rows).to_mapping()

@@ -18,6 +18,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/seu-usuario/desafio-ibge",
     packages=find_packages(where="src"),
+    py_modules=["main", "auth", "ibge_client", "processor", "stats", "submitter"],
     package_dir={"": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -28,7 +29,7 @@ setup(
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     install_requires=requirements,
     entry_points={
         "console_scripts": [

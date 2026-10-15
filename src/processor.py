@@ -1,81 +1,47 @@
-"""Normalização, identificação e exportação dos municípios informados."""
+"""Compatibilidade para consumidores das funções anteriores de processamento."""
 
-import csv
-import unicodedata
-import os
+from pathlib import Path
 
-def normalizar(texto):
-    """Remove acentos, normaliza espaços e converte o texto para minúsculas."""
-    texto = texto.strip().lower()
-    texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
-    return ' '.join(texto.split())
+from domain.models import Municipality, MunicipalityInput, MunicipalityResult
+from domain.services import find_municipality, normalize_municipality_name
+from infrastructure.csv_gateway import CsvFileGateway
+
+
+def normalizar(texto: str) -> str:
+    """Normaliza o texto mantendo o nome público da função legado."""
+    return normalize_municipality_name(texto)
+
 
 def encontrar_municipio(nome_input, lista_ibge):
-    """Encontra um município por nome normalizado e informa se há ambiguidade."""
-    nome_norm = normalizar(nome_input)
-    matches = []
-    for mun in lista_ibge:
-        if normalizar(mun["nome"]) == nome_norm:
-            matches.append(mun)
-    
-    if len(matches) == 1:
-        return ("OK", matches[0])
-    elif len(matches) > 1:
-        return ("AMBIGUO", None)
-    else:
-        return ("NAO_ENCONTRADO", None)
+    """Executa matching e mantém o retorno legado de status e dicionário."""
+    catalog = [Municipality.from_mapping(item) for item in lista_ibge]
+    status, municipality = find_municipality(nome_input, catalog)
+    return status.value, municipality.to_mapping() if municipality else None
+
 
 def processar(input_csv_path, output_csv_path, lista_ibge):
-    """Cruza o CSV de entrada com os dados do IBGE e grava os resultados."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
-    # Se o caminho não for absoluto, torna absoluto
-    if not os.path.isabs(input_csv_path):
-        input_csv_path = os.path.join(base_dir, input_csv_path)
-    if not os.path.isabs(output_csv_path):
-        output_csv_path = os.path.join(base_dir, output_csv_path)
-    
-    # Verificar se o arquivo de entrada existe
-    if not os.path.exists(input_csv_path):
-        raise FileNotFoundError(f"Arquivo não encontrado: {input_csv_path}")
-    
-    # Criar diretório de saída se não existir
-    os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
-    
-    resultados = []
-    with open(input_csv_path, mode='r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            municipio = row["municipio"]
-            populacao = row["populacao"]
-            status, dados_ibge = encontrar_municipio(municipio, lista_ibge)
-            
-            if status == "OK":
-                resultados.append({
-                    "municipio_input": municipio,
-                    "populacao_input": populacao,
-                    "municipio_ibge": dados_ibge["nome"],
-                    "uf": dados_ibge["uf"],
-                    "regiao": dados_ibge["regiao"],
-                    "id_ibge": dados_ibge["id_ibge"],
-                    "status": status
-                })
-            else:
-                resultados.append({
-                    "municipio_input": municipio,
-                    "populacao_input": populacao,
-                    "municipio_ibge": "",
-                    "uf": "",
-                    "regiao": "",
-                    "id_ibge": "",
-                    "status": status
-                })
-    
-    # Escreve resultado.csv
-    with open(output_csv_path, mode='w', encoding='utf-8', newline='') as f:
-        fieldnames = ["municipio_input", "populacao_input", "municipio_ibge", "uf", "regiao", "id_ibge", "status"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(resultados)
-    
-    return resultados
+    """Processa CSV com o novo domínio e mantém a assinatura histórica."""
+    input_path = Path(input_csv_path)
+    output_path = Path(output_csv_path)
+    project_root = Path(__file__).resolve().parent.parent
+    if not input_path.is_absolute():
+        input_path = project_root / input_path
+    if not output_path.is_absolute():
+        output_path = project_root / output_path
+
+    gateway = CsvFileGateway()
+    input_rows = gateway.read(input_path)
+    catalog = [Municipality.from_mapping(item) for item in lista_ibge]
+    results = []
+    for input_row in input_rows:
+        status, municipality = find_municipality(input_row.name, catalog)
+        results.append(
+            MunicipalityResult(
+                input_name=input_row.name,
+                input_population=input_row.population,
+                status=status,
+                municipality=municipality,
+            )
+        )
+    gateway.write(output_path, results)
+    return [result.to_mapping() for result in results]

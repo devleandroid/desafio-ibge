@@ -1,49 +1,32 @@
-"""Envio das estatísticas calculadas para uma Edge Function do Supabase."""
+"""Compatibilidade para publicação Supabase usando a função anterior."""
 
-import os
-
-import requests
 from dotenv import load_dotenv
 
-load_dotenv()
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+from application.errors import StatisticsPublishingError
+from domain.models import MunicipalityStatistics
+from infrastructure.config import AppSettings
+from infrastructure.supabase_submitter import SupabaseStatisticsPublisher
 
 
 def enviar_estatisticas(access_token, stats):
-    """Envia estatísticas usando o token de acesso do usuário autenticado."""
-    if not SUPABASE_URL:
-        print("❌ SUPABASE_URL não encontrada no .env")
+    """Publica estatísticas e comunica falhas sem descartar o resultado local."""
+    load_dotenv()
+    settings = AppSettings.from_environment().supabase
+    if settings is None:
+        print("❌ Configure as credenciais do Supabase no arquivo .env.")
         return
-    if not access_token:
-        print("❌ Token de acesso ausente; as estatísticas não foram enviadas.")
-        return
-
-    url = f"{SUPABASE_URL.rstrip('/')}/functions/v1/ibge-submit"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-    if SUPABASE_ANON_KEY:
-        headers["apikey"] = SUPABASE_ANON_KEY
-
-    print(f"\n📤 Enviando estatísticas para: {url}")
+    domain_statistics = MunicipalityStatistics(
+        total_municipalities=stats["total_municipios"],
+        found=stats["total_ok"],
+        not_found=stats["total_nao_encontrado"],
+        ambiguous=stats["total_ambiguo"],
+        api_errors=stats.get("total_erro_api", 0),
+        total_population=stats["pop_total_ok"],
+        average_by_region=stats["medias_por_regiao"],
+    )
     try:
-        resp = requests.post(url, json={"stats": stats}, headers=headers, timeout=10)
-
-        if 200 <= resp.status_code < 300:
-            print("✅ Estatísticas enviadas com sucesso!")
-            if resp.text:
-                try:
-                    print(f"   Resposta: {resp.json()}")
-                except ValueError:
-                    print(f"   Resposta: {resp.text}")
-        elif resp.status_code == 404:
-            print("⚠️ Função 'ibge-submit' não encontrada no Supabase.")
-            print("   Verifique se a Edge Function está implantada neste projeto.")
-        else:
-            print(f"❌ Erro ao enviar: {resp.status_code}")
-            print(f"   Resposta: {resp.text}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Erro ao enviar estatísticas: {e}")
+        SupabaseStatisticsPublisher(settings).publish(access_token, domain_statistics)
+    except StatisticsPublishingError as error:
+        print(f"❌ {error}")
+        return
+    print("✅ Estatísticas enviadas com sucesso!")
