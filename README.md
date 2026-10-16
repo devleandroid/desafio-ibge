@@ -50,6 +50,11 @@ supabase db push
 supabase functions deploy ibge-submit
 ```
 
+Se uma tentativa anterior criou `ibge_statistics` com apenas `id`, `stats` e
+`created_at`, a migração completa as colunas que faltam. Como essa primeira
+migração falhou, corrija os arquivos e execute `supabase db push` novamente no
+diretório do projeto.
+
 Para conferir os dados depois de executar `python src/main.py`, use o SQL
 Editor:
 
