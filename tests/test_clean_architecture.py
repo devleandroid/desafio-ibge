@@ -7,9 +7,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
+import requests
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from application.errors import CsvInputError, StatisticsPublishingError
+from application.errors import MunicipalityCatalogError
 from application.use_cases import ProcessMunicipalityCsv
 from domain.models import Municipality, MunicipalityInput, MunicipalityResult, MunicipalityStatus
 from domain.services import calculate_statistics, find_municipality
@@ -204,11 +207,37 @@ class ConfigurationAndIbgeAdapterTest(unittest.TestCase):
             },
             {"id": 5300108, "nome": "Brasília", "microrregiao": None},
         ]
+        session.get.side_effect = lambda *args, **kwargs: self._response_with_verified_bundle(
+            session.get.return_value, kwargs
+        )
         municipalities = IbgeMunicipalityClient(session=session).load()
 
         self.assertEqual(municipalities[0].region, "Sudeste")
         self.assertEqual(municipalities[1].state, "DF")
         self.assertEqual(municipalities[1].region, "Centro-Oeste")
+        session.get.assert_called_once()
+
+    def _response_with_verified_bundle(self, response, request_kwargs):
+        """Confirma que a chamada usa um bundle existente com validação TLS ativa."""
+        bundle_path = Path(request_kwargs["verify"])
+        self.assertTrue(bundle_path.is_file())
+        bundle_contents = bundle_path.read_text(encoding="ascii")
+        self.assertIn("BEGIN CERTIFICATE", bundle_contents)
+        self.assertGreaterEqual(bundle_contents.count("BEGIN CERTIFICATE"), 2)
+        return response
+
+    def test_falha_tls_mantem_instrucao_para_bundle_customizado(self):
+        """Orienta sobre a configuração TLS sem sugerir desativar a validação."""
+        session = Mock()
+        session.get.side_effect = requests.exceptions.SSLError(
+            "certificate verify failed"
+        )
+
+        with self.assertRaises(MunicipalityCatalogError) as error:
+            IbgeMunicipalityClient(session=session).load()
+
+        self.assertIn("REQUESTS_CA_BUNDLE", str(error.exception))
+        self.assertIn("validação TLS", str(error.exception))
 
 
 if __name__ == "__main__":

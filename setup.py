@@ -20,6 +20,7 @@ setup(
     packages=find_packages(where="src"),
     py_modules=["main", "auth", "ibge_client", "processor", "stats", "submitter"],
     package_dir={"": "src"},
+    package_data={"infrastructure": ["certs/*.pem"]},
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.13",

@@ -1,6 +1,11 @@
 """Adaptador HTTP que carrega e converte o catálogo oficial de municípios."""
 
+import os
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
+from collections.abc import Iterator
 
 import requests
 
@@ -9,6 +14,11 @@ from domain.models import Municipality
 
 IBGE_MUNICIPALITIES_URL = (
     "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
+)
+SECTIGO_INTERMEDIATE_CERTIFICATE = (
+    Path(__file__).resolve().parent
+    / "certs"
+    / "sectigo-public-server-authentication-ca-dv-r36.pem"
 )
 
 
@@ -23,9 +33,20 @@ class IbgeMunicipalityClient:
     def load(self) -> list[Municipality]:
         """Baixa os municípios e trata estruturas incompletas com valores padrão."""
         try:
-            response = self._session.get(IBGE_MUNICIPALITIES_URL, timeout=self._timeout)
-            response.raise_for_status()
-            payload = response.json()
+            with self._trusted_ca_bundle() as ca_bundle:
+                response = self._session.get(
+                    IBGE_MUNICIPALITIES_URL,
+                    timeout=self._timeout,
+                    verify=ca_bundle,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except requests.exceptions.SSLError as error:
+            raise MunicipalityCatalogError(
+                "Falha na validação TLS da API do IBGE. Verifique a cadeia de "
+                "certificados do servidor ou configure REQUESTS_CA_BUNDLE com "
+                f"um bundle de CAs confiável. A verificação TLS permanece ativa. ({error})"
+            ) from error
         except (requests.exceptions.RequestException, ValueError) as error:
             raise MunicipalityCatalogError(
                 f"Não foi possível carregar municípios do IBGE: {error}"
@@ -42,6 +63,30 @@ class IbgeMunicipalityClient:
         if not municipalities:
             raise MunicipalityCatalogError("A API do IBGE não retornou municípios.")
         return municipalities
+
+    @contextmanager
+    def _trusted_ca_bundle(self) -> Iterator[str]:
+        """Combina CAs do Requests com o intermediário ausente na cadeia do IBGE."""
+        configured_bundle = (
+            os.environ.get("REQUESTS_CA_BUNDLE")
+            or os.environ.get("CURL_CA_BUNDLE")
+            or requests.certs.where()
+        )
+        with tempfile.TemporaryDirectory(prefix="desafio-ibge-ca-") as directory:
+            bundle = Path(directory) / "ca-bundle.pem"
+            try:
+                bundle.write_bytes(
+                    Path(configured_bundle).read_bytes()
+                    + b"\n"
+                    + SECTIGO_INTERMEDIATE_CERTIFICATE.read_bytes()
+                    + b"\n"
+                )
+            except OSError as error:
+                raise MunicipalityCatalogError(
+                    "Não foi possível preparar o bundle de certificados TLS: "
+                    f"{error}"
+                ) from error
+            yield str(bundle)
 
     @staticmethod
     def _parse_municipality(item: dict[str, Any]) -> Municipality | None:
